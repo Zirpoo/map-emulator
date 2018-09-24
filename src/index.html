@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
+    <title>Map Emulator</title>
+
+    <link rel="stylesheet" href="/assets/main.css">
+</head>
+<body>
+    <canvas></canvas>
+
+    <script src="/assets/forms.js"></script>
+    <script src="/assets/isomorph.js"></script>
+    <script type="text/javascript">
+        var isomorph = new Isomorph({
+            canvas: document.getElementsByTagName('canvas')[0],
+            scale: 0.58,
+            origin: [0, -35],
+            defaultStyle: {
+                backgroundColor: '#ddd',
+                border: '#c5c5c5',
+                color: 'black'
+            }
+        });
+        isomorph.onFormEvent('click', function (form) {
+            console.log(`Form ${form.id} clicked!`);
+            this.canvas.ctx.fillStyle = "lightblue";
+            this.update(form);
+        });
+        isomorph.customGrid(14, 20, 50);
+    </script>
+</body>
+</html>

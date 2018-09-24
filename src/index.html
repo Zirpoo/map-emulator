@@ -10,6 +10,7 @@
 <body>
     <canvas></canvas>
 
+    <script src="/assets/Astar.js"></script>
     <script src="/assets/forms.js"></script>
     <script src="/assets/isomorph.js"></script>
     <script type="text/javascript">
@@ -24,7 +25,7 @@
             }
         });
         isomorph.onFormEvent('click', function (form) {
-            console.log(`Form ${form.id} clicked!`);
+            console.log(`${form.name} ${form.id} clicked!`);
             this.canvas.ctx.fillStyle = "lightblue";
             this.update(form);
         });

@@ -11,6 +11,10 @@ class Isomorph {
         this.callbackStyles = [];
         this.form = new Form();
         this.forms = [];
+        this.grid = {
+            width: 0,
+            height: 0
+        };
         
         if (options && options.canvas) {
             this.canvas = options.canvas;
@@ -190,6 +194,9 @@ class Isomorph {
         if (!formHeight) {
             formHeight = formWidth;
         }
+        this.grid.width = width;
+        this.grid.height = height;
+
         for (let i = 0; i < height; i++) {
             for (let j = 0; j < height; j++) {
                 if (i < width) {
@@ -214,5 +221,49 @@ class Isomorph {
                 }
             }
         }
+    }
+    
+    /**
+     * Get isometric x and y values from the id
+     * 
+     * @param {Number} formId 
+     */
+    getFormInfo (formId) {
+        let x = formId % this.grid.width;
+        if (x == 0) {
+            x = 14;
+        }
+        let y = Math.ceil((formId - (x - 1)) / 28);
+        let odd = ((formId - (x - 14)) / (y * 2)) == 14 ? 1 : 0;
+        return {x, y, odd};
+    }
+    
+    /**
+     * Search for every adjacent forms around
+     * 
+     * @param {Number} formId 
+     */
+    getAdjacentForms (formId) {
+        let originPos = this.getFormInfo(formId);
+        let moves = [
+            [[14, -15], [-14, 13]], // [x, -x], [y, -y] Peer movements
+            [[15, -14], [-13, 14]] // Odd movements
+        ];
+        let move = moves[originPos.odd];
+        let adjacentForms = [null, null, null, null];
+
+        if (originPos.y < this.grid.height) {
+            adjacentForms[0] = formId + move[0][0];
+        }
+        if (originPos.y > 1 && (originPos.x > 1 || originPos.odd == 1)) {
+            adjacentForms[1] = formId + move[0][1];
+        }
+        if (originPos.y > 1 && (originPos.x < this.grid.width || originPos.odd == 0)) {
+            adjacentForms[2] = formId + move[1][0];
+        }
+        if (originPos.x > 1 && originPos.y < this.grid.height) {
+            adjacentForms[3] = formId + move[1][1];
+        }
+        return adjacentForms;
     }
 }

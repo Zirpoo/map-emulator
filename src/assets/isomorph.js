@@ -9,11 +9,16 @@ class Isomorph {
     constructor (options) {
         this.options = options;
         this.callbackStyles = [];
-        this.form = new Form();
-        this.forms = [];
+        this.cells = [];
+        this.pathfinder = null;
         this.grid = {
+            origin: [0, 0],
             width: 0,
-            height: 0
+            height: 0,
+            cell: {
+                height: 0,
+                width: 0
+            }
         };
         
         if (options && options.canvas) {
@@ -29,22 +34,28 @@ class Isomorph {
                 if (!this.canvas.getAttribute('height')) {
                     this.canvas.height = window.innerHeight;
                 }
+                if (this.options.origin instanceof Array && this.options.origin.length) {
+                    this.grid.origin = this.options.origin;
+                }
+                if (!this.options.scale) {
+                    this.options.scale = 1;
+                }
                 this.canvas.ctx = this.canvas.getContext('2d');
                 this.canvas.ctx.scale(this.options.scale, this.options.scale);
-                this.canvas.ctx.translate(
-                    this.options.origin[0] || 0.1,
-                    this.options.origin[1] || 0.1
-                );
-                this.canvas.ctx.rotate(45 * (Math.PI/180));
-    
+                this.canvas.ctx.translate(this.grid.origin[0], this.grid.origin[1]);
                 this.canvas.ctx.fillStyle = this.options.defaultStyle.backgroundColor || "";
                 this.canvas.ctx.strokeStyle = this.options.defaultStyle.border || "";
+                this.canvas.ctx.font = this.options.defaultStyle.font || "15px Calibri";
                 this.canvas.ctx.lineWidth = 1;
+                
+                if (this.canvas.ctx.fillStyle.length > 1) {
+                    this.callbackStyles.push('fill');
+                }
                 if (this.canvas.ctx.strokeStyle.length > 1) {
                     this.callbackStyles.push('stroke');
                 }
             } catch (error) {
-                context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.canvas.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
                 console.error('An error occured while initializing the canvas');
             }
         } else {
@@ -53,88 +64,77 @@ class Isomorph {
     }
 
     /**
-     * Set an event and execute a callback when the pointer is on a form
+     * Calculate the perimeter of a cell and check if the pointer is into it
      * 
-     * @param {String} eventName 
-     * @param {Function} callback 
+     * @param {MouseEvent} event
+     * @returns {Object} A cell object
      */
-    onFormEvent (eventName, callback) {
-        this.canvas.addEventListener(eventName, e => {
-            let x = Math.floor(e.clientX / this.options.scale / (2 - this.options.scale));
-            let y = Math.floor(e.clientY / this.options.scale / (2 - this.options.scale));
-            let pointer = this.rotatePoint(x, y, 0, -35, -90);
-            pointer.x -= 50/2;
-            let form = this.forms.find(form => this.onForm(pointer, form));
-
-            if (form) {
-                callback.call(this, form);
+    onCell (event) {
+        let mx = Math.floor(event.clientX * this.options.scale);
+        let my = Math.floor(event.clientY * this.options.scale);
+        let cellHalfWidth = Math.floor(this.grid.cell.width / 2);
+        let cellHalfHeight = Math.floor(this.grid.cell.height / 2);
+        
+        return this.cells.find(cell => {
+            let originX = cell.x + cellHalfWidth + this.grid.origin[0];
+            let originY = cell.y + cellHalfHeight + this.grid.origin[1];
+            let mouseOrigin = {
+                x: Math.abs(mx - originX),
+                y: Math.abs(my - originY)
+            };
+            if (
+                mouseOrigin.x < cellHalfWidth && 
+                mouseOrigin.y < cellHalfHeight && 
+                (mouseOrigin.x + mouseOrigin.y) <= (cellHalfWidth + cellHalfHeight) / 2
+            ) {
+                return true;
             }
+            return false;
         });
     }
 
     /**
-     * Calculate the perimeter of a form and check if the pointer is into it
+     * Set an event on every cells
      * 
-     * @param {MouseEvent} pointer 
-     * @param {Form} form 
-     * @returns {boolean}
+     * @param {String} eventName 
+     * @param {Function} callback 
      */
-    onForm (pointer, form) {
-        if (
-            // Isometric left/right X axis
-            form.x - form.width / 3 < pointer.x && 
-            form.x + form.width / (2 - this.options.scale) > pointer.x && 
-            // Isometric left/right Y axis
-            form.y - form.height / 2 < pointer.y && 
-            form.y + form.height / 2 > pointer.y
-        ) {
-            return true;
+    addGlobalCellsEvent (eventName, callback) {
+        for (let i = 0; i < this.cells.length; i++) {
+            if (!this.cells[i].events[eventName]) {
+                this.cells[i].events[eventName] = [];
+            }
+            this.cells[i].events[eventName].push(callback);
         }
-        return false;
     }
 
     /**
-     * Calculate the rotation new coordinates on a given origin
+     * Draw a new cell on the canvas
      * 
-     * @param {Number} posX 
-     * @param {Number} posY 
-     * @param {Number} originX 
-     * @param {Number} originY 
-     * @param {Number} angle 
-     * @returns {Object} x and y coordinates after the rotation
+     * @param {Number} x 
+     * @param {Number} y 
+     * @param {Number} width 
+     * @param {Number} height 
+     * @param {Object} existingCell 
      */
-    rotatePoint (posX, posY, originX, originY, angle) {
-        var radians = (Math.PI / 180) * angle,
-            cos = Math.cos(radians),
-            sin = Math.sin(radians),
-            x = (cos * (originX - posX)) + (sin * (originY - posY)) + posX,
-            y = (cos * (originY - posY)) - (sin * (originX - posX)) + posY;
-
-        return {x, y};
-    }
-
-    /**
-     * Draw a new form on the canvas
-     * 
-     * @param {Form} form 
-     * @param {Form} existingForm 
-     */
-    add (form, existingForm) {
-        switch (form.name) {
-            case "Square":
-                this.canvas.ctx.fillRect(form.x, form.y, form.width, form.height);
-
-                if (!existingForm) {
-                    this.forms.push({
-                        name: 'Square',
-                        id: form.id,
-                        x: form.x,
-                        y: form.y,
-                        width: form.width,
-                        height: form.height
-                    });
-                }
-                break;
+    addCell (id, x, y, width, height, existingCell) {
+        // Diamond cell
+        this.canvas.ctx.beginPath();
+        this.canvas.ctx.moveTo(x + width * 0.5, y);
+        this.canvas.ctx.lineTo(x, y + height * 0.5);
+        this.canvas.ctx.lineTo(x + width * 0.5, y + height);
+        this.canvas.ctx.lineTo(x + width, y + height * 0.5);
+        this.canvas.ctx.lineTo(x + width * 0.5, y);
+        
+        if (!existingCell) {
+            this.cells.push({
+                id,
+                x,
+                y,
+                events: {},
+                neighbors: this.getAdjacentCells(id),
+                grid: this.getCellInfo(id)
+            });
         }
         for (let i = 0; i < this.callbackStyles.length; i++) {
             this.canvas.ctx[this.callbackStyles[i]]();
@@ -142,128 +142,180 @@ class Isomorph {
     }
     
     /**
-     * Update form in canvas
+     * Update a cell in canvas
      * 
-     * @param {Form} form 
+     * @param {Object} cell 
      */
-    update (form) {
-        let existingForm = this.forms.find(el => el.id == form.id);
-        this.add(form, existingForm);
+    update (cell) {
+        let existingCell = this.cells.find(el => el.id == cell.id);
+        this.addCell(cell.id, cell.x, cell.y, this.grid.cell.width, this.grid.cell.height, existingCell);
 
-        if (existingForm.text) {
-            this.addText(existingForm.id, existingForm.text.x, existingForm.text.y);
+        if (existingCell.text) {
+            this.addText(existingCell.id, existingCell.text.x, existingCell.text.y);
         }
     }
 
     /**
-     * Draw text on a form
+     * Draw text on a cell
      * 
-     * @param {any} text 
-     * @param {Number} x 
-     * @param {Number} y 
+     * @param {any} text
+     * @param {Number} x
+     * @param {Number} y
      */
     addText (text, x, y) {
-        let defaultStyle = isomorph.options && isomorph.options.defaultStyle;
-        isomorph.canvas.ctx.font = "22px Calibri";
+        let defaultStyle = this.options && this.options.defaultStyle;
 
         if (defaultStyle && defaultStyle.color) {
-            isomorph.canvas.ctx.fillStyle = defaultStyle.color;
+            this.canvas.ctx.fillStyle = defaultStyle.color;
         } else {
-            isomorph.canvas.ctx.fillStyle = "black";
+            this.canvas.ctx.fillStyle = "#333333";
         }
-        isomorph.canvas.ctx.fillText(text, x, y);
-        let form = isomorph.forms.find(form => form.id == text);
+        this.canvas.ctx.fillText(text, x, y);
+        let cell = this.cells.find(cell => cell.id == text);
 
-        if (!form.text) {
-            form.text = {x, y};
+        if (!cell.text) {
+            cell.text = {x, y};
         }
         if (defaultStyle && defaultStyle.backgroundColor) {
-            isomorph.canvas.ctx.fillStyle = defaultStyle.backgroundColor;
+            this.canvas.ctx.fillStyle = defaultStyle.backgroundColor;
         }
     }
 
     /**
      * A custom isometric map for my project
      * 
-     * @param {Number} width 
-     * @param {Number} height 
-     * @param {Number} formWidth 
-     * @param {Number} formHeight 
+     * @param {Number} rows
+     * @param {Number} cols
      */
-    customGrid (width, height, formWidth, formHeight) {
-        if (!formHeight) {
-            formHeight = formWidth;
-        }
-        this.grid.width = width;
-        this.grid.height = height;
+    customGrid (rows, cols) {
+        let cellWidth = Math.floor(window.innerWidth / (rows + 0.5));
+        let cellHeight = Math.floor((window.innerHeight) / (cols + 0.5));
+        let fontSize = parseInt(this.canvas.ctx.font);
+        this.grid.rows = rows;
+        this.grid.cols = cols;
+        this.grid.cell.width = cellWidth;
+        this.grid.cell.height = cellHeight;
 
-        for (let i = 0; i < height; i++) {
-            for (let j = 0; j < height; j++) {
-                if (i < width) {
-                    let xId = width + ((j * ((height * 2) - 12)) + (i + 1));
-                    let evenX = formWidth * ((j + 1) + (i + 1));
-                    let evenY = (formWidth * (j + 1)) + (-formWidth * (i + 1));
-                    let textX = evenX + formWidth / 3;
-                    let textY = evenY + formWidth / 6 + 25;
+        let j = 0;
+        for (let i = 0; i < rows; i++) {
+            let id = i + (j * (rows * 2));
+            let x = cellWidth * i;
+            let y = cellHeight * (j + 1);
 
-                    isomorph.add(this.form.Square(xId, evenX, evenY, formWidth));
-                    setTimeout(() => isomorph.addText(xId, textX, textY, i, j), (i + 1) * (j + 1));
-                }
-                if (j < width) {
-                    let yId = (i * width) + ((i * ((height - 6))) + (j + 1));
-                    let oddX = formWidth * (j + (i + 1));
-                    let oddY = (formWidth * i) + (-formWidth * j);
-                    let textX = oddX + formWidth / 3;
-                    let textY = oddY + formWidth / 6 + 25;
-
-                    isomorph.add(this.form.Square(yId, oddX, oddY, formWidth));
-                    setTimeout(() => isomorph.addText(yId, textX, textY, i, j), (i + 1) * (j + 1));
-                }
+            this.addCell(id, x, y, cellWidth, cellHeight);
+            this.addText(id, (cellWidth/2 - ((fontSize/4) * id.toString().length)) + x, y + ((cellHeight/3) + (fontSize-2)), 0, 0);
+            if (i + 1 == rows && j < cols - 1) {
+                i = -1;
+                j++;
             }
         }
+        j = 0;
+        for (let i = 0; i < rows; i++) {
+            let id = i + (j * rows) + ((j + 1) * rows);
+            let x = (cellWidth * (i + 1)) - cellWidth / 2;
+            let y = (cellHeight * (j + 2)) - cellHeight / 2;
+
+            this.addCell(id, x, y, cellWidth, cellHeight);
+            this.addText(id, (cellWidth/2 - ((fontSize/4) * id.toString().length)) + x, y + ((cellHeight/3) + (fontSize-2)), 0, 0);
+            if (i + 1 == rows && j < cols - 1) {
+                i = -1;
+                j++;
+            }
+        }
+
+        this.cells = this.cells.sort((a, b) => a.id - b.id);
+        this.pathfinder = new PathFinder(this);
+        this.canvas.addEventListener('click', event => this.eventHandler(event));
+        this.canvas.addEventListener('mousemove', event => this.eventHandler(event));
+    }
+
+    /**
+     * execute every functions of the cell when the pointer is on it
+     * 
+     * @param {Event} event 
+     */
+    eventHandler (event) {
+        let cell = this.onCell(event);
+
+        if (cell && cell.events[event.type] && cell.events[event.type].length > 0) {
+            for (let callback of cell.events[event.type]) {
+                callback.call(this, cell);
+            }
+        }
+    }
+
+    /**
+     * Attach a context to each cells from the object cellsContext
+     * 
+     * @param {Array<Object>} cellsContext
+     */
+    updateCellsContext (cellsContext) {
+        // Key s and l=[3,11,75,83] doesn't show any pattern purposes other than graphics
+        // Key l=[7,71] are black cells in fights
+        // Key l=195 are pnjs cell location that can be here (Including pnj's not visible yet)
+        // Key c is a cell to move to another map
+        let lastFillStyle = this.canvas.ctx.fillStyle;
+        
+        for (let i = 0; i < cellsContext.length; i++) {
+            if (!Object.keys(cellsContext[i]).length || [2, 66, 64].includes(cellsContext[i].l)) {
+                this.canvas.ctx.fillStyle = "#9c7272";
+                this.cells[i].canWalk = false;
+                this.update(this.cells[i]);
+            } else {
+                this.cells[i].canWalk = true;
+            }
+            if (cellsContext[i].hasOwnProperty('c')) {
+                this.canvas.ctx.fillStyle = "#dcb776";
+                if (!this.cells[i].events.click) {
+                    this.cells[i].events.click = [];
+                }
+                this.cells[i].events.click.push(function (cell) {
+                    console.warn("Map change doesn't work yet");
+                });
+                this.update(this.cells[i]);
+            }
+        }
+        this.canvas.ctx.fillStyle = lastFillStyle;
     }
     
     /**
      * Get isometric x and y values from the id
      * 
-     * @param {Number} formId 
+     * @param {Number} cellId 
      */
-    getFormInfo (formId) {
-        let x = formId % this.grid.width;
-        if (x == 0) {
-            x = 14;
-        }
-        let y = Math.ceil((formId - (x - 1)) / 28);
-        let odd = ((formId - (x - 14)) / (y * 2)) == 14 ? 1 : 0;
+    getCellInfo (cellId) {
+        let x = cellId % this.grid.rows;
+        let y = Math.ceil((cellId - (x - 1)) / 28);
+        let odd = ((cellId - (x - 14)) / (y * 2)) == 14 ? 1 : 0;
         return {x, y, odd};
     }
     
     /**
-     * Search for every adjacent forms around
+     * Search for every adjacent cells around
      * 
-     * @param {Number} formId 
+     * @param {Number} cellId 
      */
-    getAdjacentForms (formId) {
-        let originPos = this.getFormInfo(formId);
+    getAdjacentCells (cellId) {
+        let originPos = this.getCellInfo(cellId);
         let moves = [
             [[14, -15], [-14, 13]], // [x, -x], [y, -y] Peer movements
             [[15, -14], [-13, 14]] // Odd movements
         ];
         let move = moves[originPos.odd];
-        let adjacentForms = [null, null, null, null];
+        let adjacentCells = [null, null, null, null];
 
-        if (originPos.y < this.grid.height) {
-            adjacentForms[0] = formId + move[0][0];
+        if (originPos.y < this.grid.cols && (originPos.x < this.grid.rows || originPos.odd == 0)) {
+            adjacentCells[0] = cellId + move[0][0];
         }
-        if (originPos.y > 1 && (originPos.x > 1 || originPos.odd == 1)) {
-            adjacentForms[1] = formId + move[0][1];
+        if ((originPos.y > 1 || originPos.odd == 1) && (originPos.x > 1 || originPos.odd == 1)) {
+            adjacentCells[1] = cellId + move[0][1];
         }
-        if (originPos.y > 1 && (originPos.x < this.grid.width || originPos.odd == 0)) {
-            adjacentForms[2] = formId + move[1][0];
+        if ((originPos.y > 1 || (originPos.odd == 1 && originPos.y < this.grid.cols)) && (originPos.x < this.grid.rows || originPos.odd == 0)) {
+            adjacentCells[2] = cellId + move[1][0];
         }
-        if (originPos.x > 1 && originPos.y < this.grid.height) {
-            adjacentForms[3] = formId + move[1][1];
+        if ((originPos.x > 1 || (originPos.odd == 1 && originPos.y < this.grid.cols)) && originPos.y < this.grid.cols) {
+            adjacentCells[3] = cellId + move[1][1];
         }
-        return adjacentForms;
+        return adjacentCells;
     }
 }

@@ -10,26 +10,54 @@
 <body>
     <canvas></canvas>
 
-    <script src="/assets/Astar.js"></script>
-    <script src="/assets/forms.js"></script>
+    <script src="/assets/pathFinder.js"></script>
     <script src="/assets/isomorph.js"></script>
     <script type="text/javascript">
+        var pathfinder;
+        var assetsVersion = '2.22.1';
+        var mapId = 148797;
+        
         var isomorph = new Isomorph({
             canvas: document.getElementsByTagName('canvas')[0],
-            scale: 0.58,
-            origin: [0, -35],
+            origin: [0, -41],
             defaultStyle: {
                 backgroundColor: '#ddd',
-                border: '#c5c5c5',
-                color: 'black'
+                border: '#c5c5c5'
             }
         });
-        isomorph.onFormEvent('click', function (form) {
-            console.log(`${form.name} ${form.id} clicked!`);
-            this.canvas.ctx.fillStyle = "lightblue";
-            this.update(form);
-        });
-        isomorph.customGrid(14, 20, 50);
+        
+        // URL: `https://ankama.akamaized.net/games/dofus-tablette/assets/${assetsVersion}/maps/${mapId}.json`
+        fetch('/assets/map-148797.json')
+            .then(response => response.json())
+            .then(context => {
+                isomorph.customGrid(14, 20);
+                isomorph.updateCellsContext(context.cells);
+                isomorph.addGlobalCellsEvent('click', function (cell) {
+                    console.log(`Cell ${cell.id} clicked!`);
+                    this.canvas.ctx.fillStyle = "grey";
+                    this.update(cell);
+                    setTimeout(() => {
+                        isomorph.cells.forEach(cell => this.update(cell));
+                        isomorph.updateCellsContext(context.cells);
+                    }, 1000);
+                });
+                //isomorph.pathfinder.run(128, 508);
+            });
+        
+        /*
+        fetch(`https://proxyconnection.touch.dofus.com/data/map?lang=fr&v=${assetsVersion}`, {
+            method: 'POST',
+            headers: {
+                "Content-Type": 'application/json; charset=utf-8'
+            },
+            body: JSON.stringify({
+                class: "MapPositions",
+                ids: [mapId]
+            })
+        })
+        .then(response => response.json())
+        .then(data => console.log(`[${data[mapId].posX},${data[mapId].posY}]`));
+        */
     </script>
 </body>
 </html>

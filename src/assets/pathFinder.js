@@ -6,80 +6,75 @@ class PathFinder {
      */
     constructor (isomorph) {
         this.isomorph = isomorph;
-    }
-    
-    /**
-     * 
-     * @param {Number} start 
-     * @param {Number} end 
-     */
-    run (start, end) {
-        let cells = this.isomorph.cells.slice();
-        let closeCells = [];
-        let current = cells[start];
-        let endCell = cells[end];
-
-
-        current.score = 0;
-        current.h = this.heuristics(current, endCell);
-        closeCells.push(current);
-
-        let s = 1;
-        while (current) {
-            for (let neighborId of current.neighbors) {
-                if (cells[neighborId].canWalk) {
-                    let neighbor = cells[neighborId];
-
-                    if (!closeCells.find(cell => cell.id == neighbor.id)) {
-                        neighbor.previous = current;
-                        neighbor.score = current.score + 1;
-                        neighbor.h = this.heuristics(neighbor, endCell);
-                        closeCells.push(neighbor);
-                        current = neighbor;
-                        this.isomorph.canvas.ctx.fillStyle = "grey";
-                        this.isomorph.update(current);
-                    }
-                }
-            }
-            if (s == 20) {
-                break;
-            }
-            s++;
-        }
-        console.log(
-            this.findPath(cells, start),
-            closeCells
-        );
+        this.cells = isomorph.cells.slice(0);
     }
 
-    findPath (cells, start) {
-        let current = cells[start];
-        let path = [];
-
-        while (current) {
-            let bestCell = current;
-            path.push(bestCell);
-
-            for (let neighborId of current.neighbors) {
-                let neighbor = cells[neighborId];
-
-                if (neighbor.h && neighbor.h <= bestCell.h) {
-                    bestCell = neighbor;
-                }
-            }
-            if (bestCell.id == current.id) {
-                console.log('No better path found!');
-                break;
-            }
-            current = bestCell;
+    getBestPath (cameFrom, current) {
+        let path = [current]
+        while (cameFrom[current.id]) {
+            current = cameFrom[current.id];
+            path.push(current);
         }
         return path;
     }
 
-    heuristics (current, endCell) {
-        let indice = current.grid.odd != endCell.grid.odd;
-        let noIsoXMove = Math.abs(current.grid.x - endCell.grid.x) + indice;
+    heuristic (start, goal) {
+        return 1;
+    }
 
-        return noIsoXMove + ((Math.abs(current.grid.y - endCell.grid.y) - (noIsoXMove - indice % 2)) * 2);
+    getCellDistance(a, b) {
+        return Math.sqrt(Math.abs(a.x - b.x) + Math.abs(a.y - b.y));
+    }
+
+    getPath(start, goal) {
+        let closedSet = [];
+        let openSet = [this.cells[start]];
+        let cameFrom = [];
+        let gScore = [];
+        gScore[start] = 0;
+        let fScore = [];
+        fScore[start] = this.heuristic(start, goal);
+
+        while (openSet.length) {
+            let current = openSet.sort((a, b) => fScore[a.id] - fScore[b.id])[0];
+            
+            if (current.id == goal) {
+                return this.getBestPath(cameFrom, current);
+            }
+
+            openSet.find((cell, i) => (cell.id == current.id) ? openSet.splice(i, 1) : false);
+            closedSet.push(current);
+            
+            current.neighbors.push(current.id + 1);
+            current.neighbors.push(current.id - 1);
+            current.neighbors.push(current.id + 28);
+            current.neighbors.push(current.id - 28);
+            let neighbors = current.neighbors.filter(id => id && id >= 0 && id <= 559 && this.cells[id].canWalk);
+
+            for (let neighbor of neighbors) {
+                if (closedSet.find(cell => cell.id == neighbor)) {
+                    continue;
+                }
+
+                let tentative_gScore = gScore[current.id];
+                let nextCell = Math.abs(current.id - neighbor);
+
+                if (nextCell == 1 || nextCell == 28) {
+                    tentative_gScore += Math.sqrt(2);
+                } else {
+                    tentative_gScore += 1;
+                }
+
+                if (!openSet.find(cell => cell.id == neighbor)) {
+                    openSet.push(this.cells[neighbor]);
+                } else if (tentative_gScore >= gScore[neighbor]) {
+                    continue; 
+                }   
+
+                cameFrom[neighbor] = current;
+                gScore[neighbor] = tentative_gScore;
+                fScore[neighbor] = gScore[neighbor] + this.heuristic(neighbor, goal);
+            }
+        }
     }
 }

@@ -8,9 +8,9 @@ class Isomorph {
      */
     constructor (options) {
         this.options = options;
+        this.defaultStyle = (options && options.defaultStyle);
         this.callbackStyles = [];
         this.cells = [];
-        this.pathfinder = null;
         this.grid = {
             origin: [0, 0],
             width: 0,
@@ -43,9 +43,9 @@ class Isomorph {
                 this.canvas.ctx = this.canvas.getContext('2d');
                 this.canvas.ctx.scale(this.options.scale, this.options.scale);
                 this.canvas.ctx.translate(this.grid.origin[0], this.grid.origin[1]);
-                this.canvas.ctx.fillStyle = this.options.defaultStyle.backgroundColor || "";
-                this.canvas.ctx.strokeStyle = this.options.defaultStyle.border || "";
-                this.canvas.ctx.font = this.options.defaultStyle.font || "15px Calibri";
+                this.canvas.ctx.fillStyle = this.defaultStyle.backgroundColor || "";
+                this.canvas.ctx.strokeStyle = this.defaultStyle.border || "";
+                this.canvas.ctx.font = this.defaultStyle.font || "15px Calibri";
                 this.canvas.ctx.lineWidth = 1;
                 
                 if (this.canvas.ctx.fillStyle.length > 1) {
@@ -151,7 +151,12 @@ class Isomorph {
         this.addCell(cell.id, cell.x, cell.y, this.grid.cell.width, this.grid.cell.height, existingCell);
 
         if (existingCell.text) {
-            this.addText(existingCell.id, existingCell.text.x, existingCell.text.y);
+            let text = existingCell.id;
+
+            if (existingCell.text.hasOwnProperty('value')) {
+                text = existingCell.text.value;
+            }
+            this.addText(text, existingCell.text.x, existingCell.text.y);
         }
     }
 
@@ -163,21 +168,19 @@ class Isomorph {
      * @param {Number} y
      */
     addText (text, x, y) {
-        let defaultStyle = this.options && this.options.defaultStyle;
-
-        if (defaultStyle && defaultStyle.color) {
-            this.canvas.ctx.fillStyle = defaultStyle.color;
+        if (this.defaultStyle && this.defaultStyle.color) {
+            this.canvas.ctx.fillStyle = this.defaultStyle.color;
         } else {
             this.canvas.ctx.fillStyle = "#333333";
         }
         this.canvas.ctx.fillText(text, x, y);
         let cell = this.cells.find(cell => cell.id == text);
 
-        if (!cell.text) {
+        if (cell && !cell.text) {
             cell.text = {x, y};
         }
-        if (defaultStyle && defaultStyle.backgroundColor) {
-            this.canvas.ctx.fillStyle = defaultStyle.backgroundColor;
+        if (this.defaultStyle && this.defaultStyle.backgroundColor) {
+            this.canvas.ctx.fillStyle = this.defaultStyle.backgroundColor;
         }
     }
 
@@ -201,9 +204,11 @@ class Isomorph {
             let id = i + (j * (rows * 2));
             let x = cellWidth * i;
             let y = cellHeight * (j + 1);
+            let textX = (cellWidth/2 - ((fontSize/4) * id.toString().length)) + x;
+            let textY = y + ((cellHeight/3) + (fontSize-2));
 
             this.addCell(id, x, y, cellWidth, cellHeight);
-            this.addText(id, (cellWidth/2 - ((fontSize/4) * id.toString().length)) + x, y + ((cellHeight/3) + (fontSize-2)), 0, 0);
+            this.addText(id, textX, textY, 0, 0);
             if (i + 1 == rows && j < cols - 1) {
                 i = -1;
                 j++;
@@ -214,9 +219,11 @@ class Isomorph {
             let id = i + (j * rows) + ((j + 1) * rows);
             let x = (cellWidth * (i + 1)) - cellWidth / 2;
             let y = (cellHeight * (j + 2)) - cellHeight / 2;
+            let textX = (cellWidth/2 - ((fontSize/4) * id.toString().length)) + x;
+            let textY = y + ((cellHeight/3) + (fontSize-2));
 
             this.addCell(id, x, y, cellWidth, cellHeight);
-            this.addText(id, (cellWidth/2 - ((fontSize/4) * id.toString().length)) + x, y + ((cellHeight/3) + (fontSize-2)), 0, 0);
+            this.addText(id, textX, textY, 0, 0);
             if (i + 1 == rows && j < cols - 1) {
                 i = -1;
                 j++;
@@ -224,7 +231,6 @@ class Isomorph {
         }
 
         this.cells = this.cells.sort((a, b) => a.id - b.id);
-        this.pathfinder = new PathFinder(this);
         this.canvas.addEventListener('click', event => this.eventHandler(event));
         this.canvas.addEventListener('mousemove', event => this.eventHandler(event));
     }
@@ -258,14 +264,14 @@ class Isomorph {
         
         for (let i = 0; i < cellsContext.length; i++) {
             if (!Object.keys(cellsContext[i]).length || [2, 66, 64].includes(cellsContext[i].l)) {
-                this.canvas.ctx.fillStyle = "#9c7272";
+                this.canvas.ctx.fillStyle = this.defaultStyle.cell.disabled;
                 this.cells[i].canWalk = false;
                 this.update(this.cells[i]);
             } else {
                 this.cells[i].canWalk = true;
             }
             if (cellsContext[i].hasOwnProperty('c')) {
-                this.canvas.ctx.fillStyle = "#dcb776";
+                this.canvas.ctx.fillStyle = this.defaultStyle.cell.eventTrigger.mapChange;
                 if (!this.cells[i].events.click) {
                     this.cells[i].events.click = [];
                 }
@@ -304,16 +310,34 @@ class Isomorph {
         let move = moves[originPos.odd];
         let adjacentCells = [null, null, null, null];
 
-        if (originPos.y < this.grid.cols && (originPos.x < this.grid.rows || originPos.odd == 0)) {
+        if (
+            (originPos.y < this.grid.cols || originPos.odd == 0) && 
+            (originPos.x < this.grid.rows || originPos.odd == 0)
+        ) {
             adjacentCells[0] = cellId + move[0][0];
         }
-        if ((originPos.y > 1 || originPos.odd == 1) && (originPos.x > 1 || originPos.odd == 1)) {
+        if (
+            (originPos.y > 1 || originPos.odd == 1) && 
+            (originPos.x >= 1 || originPos.odd == 1)
+        ) {
             adjacentCells[1] = cellId + move[0][1];
         }
-        if ((originPos.y > 1 || (originPos.odd == 1 && originPos.y < this.grid.cols)) && (originPos.x < this.grid.rows || originPos.odd == 0)) {
+        if (
+            (
+                originPos.y > 1 || (originPos.odd == 1 && 
+                originPos.y < this.grid.cols)
+            ) && 
+            (originPos.x < this.grid.rows || originPos.odd == 0)
+        ) {
             adjacentCells[2] = cellId + move[1][0];
         }
-        if ((originPos.x > 1 || (originPos.odd == 1 && originPos.y < this.grid.cols)) && originPos.y < this.grid.cols) {
+        if (
+            (
+                originPos.x > 1 || (originPos.odd == 1 && 
+                originPos.y < this.grid.cols)
+            ) &&
+            originPos.y < this.grid.cols
+        ) {
             adjacentCells[3] = cellId + move[1][1];
         }
         return adjacentCells;

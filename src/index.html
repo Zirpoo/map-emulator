@@ -10,7 +10,7 @@
 <body>
     <canvas></canvas>
 
-    <script src="/assets/pathFinder.js"></script>
+    <script src="/assets/pathfinder.js"></script>
     <script src="/assets/isomorph.js"></script>
     <script type="text/javascript">
         var pathfinder;
@@ -22,29 +22,42 @@
             origin: [0, -41],
             defaultStyle: {
                 backgroundColor: '#ddd',
-                border: '#c5c5c5'
+                border: '#c5c5c5',
+                cell: {
+                    disabled: '#9c7272',
+                    eventTrigger: {
+                        mapChange: '#dcb776'
+                    }
+                }
             }
         });
         
-        // URL: `https://ankama.akamaized.net/games/dofus-tablette/assets/${assetsVersion}/maps/${mapId}.json`
+        // DATA SOURCE URL: `https://ankama.akamaized.net/games/dofus-tablette/assets/${assetsVersion}/maps/${mapId}.json`
         fetch('/assets/map-148797.json')
             .then(response => response.json())
             .then(context => {
                 isomorph.customGrid(14, 20);
                 isomorph.updateCellsContext(context.cells);
                 isomorph.addGlobalCellsEvent('click', function (cell) {
-                    console.log(`Cell ${cell.id} clicked!`);
-                    this.canvas.ctx.fillStyle = "grey";
-                    this.update(cell);
-                    setTimeout(() => {
-                        isomorph.cells.forEach(cell => this.update(cell));
-                        isomorph.updateCellsContext(context.cells);
-                    }, 1000);
+                    // Clean out all cells to default
+                    isomorph.cells.forEach(cell => isomorph.update(cell));
+                    isomorph.updateCellsContext(context.cells);
+                    
+                    let path = pathFinder.getPath(128, cell.id);
+                    if (path) {
+                        path.forEach(cell => {
+                            this.canvas.ctx.fillStyle = "grey";
+                            isomorph.update(cell);
+                        });
+                    } else {
+                        console.error('No path found!');
+                    }
                 });
-                //isomorph.pathfinder.run(128, 508);
+                let pathFinder = new PathFinder(isomorph);
             });
         
         /*
+            Other post request sources
         fetch(`https://proxyconnection.touch.dofus.com/data/map?lang=fr&v=${assetsVersion}`, {
             method: 'POST',
             headers: {
